@@ -1,4 +1,196 @@
-# HW 2: *3D Stylization*
+# HW 2: 3D Stylization - Shark Plane
+
+![turnaround](Screenshots/turnaround_day.gif)
+
+Full turnaround video (one turn in day mode, then I hit space and it does another turn at night): [Screenshots/turnaround.mp4](Screenshots/turnaround.mp4)
+
+Scene is `Assets/Scenes/Shark Plane.unity`. Press play, then **Space** to switch between day and night. I used Unity 2022.3.25f1 (the base project was on 2022.3.9f1 and upgraded without any problems).
+
+## Concept Art
+
+| <img width="400" src="https://github.com/CIS-566-Fall-2023/hw04-stylization/assets/72320867/3068bdc4-1b08-41cf-9a16-08d94be5f1ea"> | <img width="560" src="Screenshots/final.jpg"> |
+|:--:|:--:|
+| *Concept by [requinoesis](https://www.artstation.com/requinoesis)* | *My scene in Unity* |
+
+I picked the shark plane illustration by **requinoesis** (it's one of the examples in the writeup). A few things I really liked about it and wanted to get into 3D:
+- the shadows don't just get darker, they shift hue (pink goes lavender, white goes light blue)
+- the line art is colored: deep blue on the plane, light cyan on the clouds
+- the soft frame around the edges that fades into the pale background
+- it's mostly simple rounded shapes, which mattered since I built everything out of Unity primitives
+
+Before making any materials I pulled the main colors straight from the image: background `#ECFEFF`, sky `#22D4FD`, plane pinks `#FC839F` / `#FE8AA5`, lavender `#B79FFB`, peach `#FDCEA0` and the line blue `#3263DC`. Every palette below starts from those.
+
+## 0. Base project setup
+
+**Full Screen Feature fix.** The pass blitted the camera color into the temporary buffer through the material, but never copied the result back, so nothing showed up on screen. The fix is the second blit:
+
+```csharp
+Blit(cmd, colorBuffer, temporaryBuffer, settings.material);
+Blit(cmd, temporaryBuffer, colorBuffer);
+```
+
+I checked it with a fullscreen shader graph that just inverts the colors (`Shaders/Invert.shadergraph`, the fallback material the feature looks for). A few smaller changes while I was in that file:
+- the temp buffer doesn't need depth or MSAA, so those are turned off in the descriptor
+- I ended up with four of these features on the renderer (outlines + post, a day and a night version of each), so each one gets its own temp buffer name instead of all of them sharing `_TemporaryBuffer`
+- `settings` is initialized where it's declared. Adding a new Full Screen Feature to the renderer used to throw a NullReferenceException in `Create()` because it was still null.
+
+**Depth and normal buffers.** The depth texture was already enabled in the URP asset. For normals I added the provided `NormalFeature` to `URP-Custom-Renderer`, made `Materials/Post/Normal Copy.mat` from the `Hidden/Normal Copy` shader, and set `Buffers/Normal Buffer.renderTexture` as the target. The render texture is 1920x1080, same as my game view.
+
+<img width="640" src="Screenshots/normal_buffer.jpg">
+
+*what ends up in the normal buffer (view space normals)*
+
+## 1. Surface shader
+
+`Shaders/Toon Shader.shadergraph`, with the custom function code in `Shaders/Includes/LightingHelp.hlsl`. It started as my 3 tone shader from the lab. The graph is split into groups (inputs, main light, additional lights, toon ramp, specular, rim, shadow texture, combine) so it's not one giant spaghetti mess.
+
+![toon shader graph](Screenshots/graph_toon.jpg)
+
+### Multiple lights
+I followed the tutorial for this: `ComputeAdditionalLighting` loops over the additional lights, steps each one into the same bands as the main light (using my shadow/highlight thresholds) and tints it by the light's color. Then `ToonShade` builds the main light palette and adds the point light bands on top. I multiply them by the highlight color so they stay pastel instead of blowing out.
+
+During the day there's a pink and a cyan point light next to the plane (the concept has pink and cyan bouncing around everywhere). At night those turn off and there's a warm cockpit light plus red/green nav lights on the wing tips.
+
+One thing that confused me for a while: the tutorial ramp picks the band from the raw distance attenuation (1/d²) and only uses the intensity for the color, so cranking up the intensity made the bands brighter but not any bigger. The lights only really started showing up once I moved them close to the plane (they're parented to it now so they follow it around).
+
+![additional lights](Screenshots/additional_lights.jpg)
+*left: sun only, right: with the cyan fill light on (seen from behind)*
+
+### Extra lighting feature
+I did both a specular and a rim:
+- **Specular**: Blinn-Phong cut into one hard white blob with a smoothstep (`Glossiness`, `Specular Size`). The concept has those little white glints on everything.
+- **Rim**: fresnel cut into a band. `Rim Light Align` pushes the rim towards the side facing the light, so it reads as a rim light and not just a glow all the way around. The plane gets a cyan rim like in the concept.
+
+![closeup](Screenshots/closeup_front.jpg)
+
+### Shadow texture
+I made two tiling textures: loose hatching for the plane, and little sparkles for the clouds and stars (the concept has stars all over the place so it felt right). They're made with a small Python/PIL script, `Tools/make_textures.py`. Every stroke gets drawn again shifted by the texture size, so anything that crosses an edge wraps around and the textures tile without seams.
+
+| Hatch | Sparkle |
+|:--:|:--:|
+| <img width="256" src="Assets/Textures/Shadow Hatch.png"> | <img width="256" src="Assets/Textures/Shadow Sparkle.png"> |
+
+Instead of screen position like in the lab, they're sampled with the mesh UVs: UV -> Tiling And Offset (tiling = `Shadow Scale`) -> Sample Texture 2D. That way the pattern sticks to the object and moves with it. Like puzzle 3, the "ink" only shows up inside the shadow band and gets mixed in with `Shadow Texture Color` / `Shadow Texture Strength`. Cast shadows count as shadow band too, so the plane's shadow on the cloud underneath gets sparkles in it.
+
+| hatching in the plane's shadows | sparkles in the plane's shadow on the cloud |
+|:--:|:--:|
+| ![](Screenshots/hatch_shadows.jpg) | ![](Screenshots/sparkle_shadow.jpg) |
+
+### Color palette
+Every material has its own highlight / midtone / shadow colors picked from the concept. The main thing I tried to copy is the hue shift into the shadows:
+
+| Material | Highlight | Midtone | Shadow |
+|---|---|---|---|
+| Plane body | `#FFC6D3` | `#FC7F9C` | `#A98BF5` |
+| Plane accents (props, rings) | `#B2C8FF` | `#7B8EF7` | `#6C58DB` |
+| Nose | `#FFF2DA` | `#FDC99A` | `#F4A58E` |
+| Shark | `#FFFFFF` | `#EEFBFF` | `#A9DDF6` |
+| Stars | `#FFFDF1` | `#FEEACB` | `#FDCB9C` |
+
+## 2. Special surface shader (animated colors)
+
+`Shaders/Toon Hero.shadergraph` is a copy of the toon graph with one more group at the end, "Holo Shimmer". The plane is the hero object so every part of it uses this. It adds a pastel rainbow band that sweeps across the whole plane like holographic foil, a rainbow rim, and sparkles that pop in and out.
+
+![hero](Screenshots/hero_closeup.gif)
+
+Toolbox functions in there (`HoloShimmer` in `LightingHelp.hlsl`):
+- **floor / stepped time**: Time -> Multiply (Step Rate) -> Floor -> Divide, done with nodes in the graph. Everything updates at 8 fps so it feels hand animated instead of perfectly smooth.
+- **sawtooth wave**: moves the band from one end of the plane to the other and then wraps around
+- **gain**: shapes the falloff of the band
+- **cosine palette** (iq): the pastel rainbow colors
+- **value noise**: makes the edge of the band wavy
+- **hash**: picks which spots sparkle, rerolled every time step
+
+The band is computed in world space, so it moves across all the separate pieces of the plane as one thing instead of every primitive doing its own sweep.
+
+![hero graph](Screenshots/graph_hero.jpg)
+*same as the toon graph, plus the Holo Shimmer group on the bottom right*
+
+## 3. Outlines
+
+`Shaders/Outline.shadergraph` (fullscreen shader graph), functions in `Shaders/Includes/OutlineHelp.hlsl`. It's a Full Screen Feature that runs after transparents.
+
+<img width="700" src="Screenshots/graph_outline.jpg">
+
+![outline breakdown](Screenshots/outline_breakdown.jpg)
+*depth lines only / normal lines only / the normal buffer*
+
+- **Depth lines**: 3x3 Sobel on linear eye depth. I divide the gradient by the pixel's depth so one threshold works both up close and far away.
+- **Normal lines**: Robert's cross on the normal buffer. These are thinner and pick up the inside edges, like the ring around the canopy, where the nose meets the body, and the wing joints.
+- **Animated / hand drawn**: same idea as the example in the writeup, only the depth lines move. The sample position gets offset by noise that changes on stepped time (8 fps), so the lines "boil". The thickness also changes with noise along the line, kind of like pen pressure. The normal lines don't move so the shapes stay readable.
+- **Colored lines**: the concept never uses black lines. While doing the Sobel I keep track of which tap is closest to the camera, sample the scene color there, and pick the dark blue or light cyan line based on how bright the thing in front is. So the white clouds get light lines and everything else gets the deep blue.
+- Everything is adjustable on the material: depth and normal line thickness, both thresholds, wobble amount / scale / step rate, the two line colors and the brightness cutoff between them.
+
+The glass canopy is transparent, so it's not in the depth buffer or the normal buffer and never gets a line from this pass. It draws its own outline with a fresnel cutoff instead (`Shaders/Toon Glass.shadergraph`), plus a couple of fake reflection streaks.
+
+## 4. Full screen post process
+
+`Shaders/Pastel Post.shadergraph` (`Includes/PostHelp.hlsl`), runs after the outlines:
+- a soft rounded rectangle frame that fades the edges into pale cyan / pink, like the border around the illustration. The frame edge gets pushed around by noise so it looks painted instead of perfectly clean
+- paper grain (fbm noise, plus some stretched noise for fibers). It's in pixel units so it doesn't stretch with the aspect ratio
+- a small saturation boost
+
+![passes](Screenshots/passes.jpg)
+*toon shading only / + outlines / + post process*
+
+## 5. Scene
+
+Everything is made out of Unity primitives (spheres, capsules, cylinders) plus three meshes I generated with a little editor script, `Assets/Editor/MeshMaker.cs` (Tools > Make Meshes): a puffy 5 point star, a cone (gull beaks, shark fin) and a torus (rings on the engines and around the canopy). Nothing is downloaded.
+
+- a twin-boom plane with a shark pilot sitting in a glass bubble
+- clouds (clusters of spheres), stars, floating bubbles, three seagulls flying in circles
+- the sea far below, which ends up reading like the blue panel behind the plane in the concept
+- scripts: `Spin` (propellers), `Bob` (plane, clouds and stars floating), `Seagull` (wing flapping + flying in a circle), and the provided `Turntable` on the camera pivot
+
+## 6. Interactivity: night flight
+
+Press **Space**.
+
+![day to night](Screenshots/day_to_night.gif)
+
+![night](Screenshots/night.jpg)
+
+- `MaterialSwapper.cs` is pretty much the script from the writeup. It's on every part that has a night version and switches to the next material in its list. All the night materials are in `Materials/Night`.
+- `SceneModeSwitcher.cs` does the rest of the scene: the sun becomes moonlight, the pink/cyan fill lights turn off and the cockpit + nav lights turn on, the sea gets hidden so there's sky all around, and it swaps which renderer features are active (day outline + pastel post vs. night outline + night post). The features live on the renderer asset, so it puts them back to day mode in `OnDisable`. Otherwise the asset stays in night mode after you stop playing.
+- `Shaders/Night Post.shadergraph` is a different post effect: a gradient map towards blues and purples (anything bright keeps its own color, so the stars and the cockpit look like they glow), a night sky gradient wherever the depth is at the far plane, procedural stars that twinkle on stepped time and only show up in the empty sky, and a vignette.
+
+Getting night mode to look good took a few tries. My first version was way too dark and muddy, mostly because the dark blue sea filled the whole background. Hiding the sea and letting bright colors skip the gradient map fixed most of it.
+
+## 7. Extra credit: texture support with procedural colors
+
+`Shaders/Toon Textured.shadergraph` takes a base texture instead of three picked colors and builds the three tones from it (`ProceduralPalette` in `LightingHelp.hlsl`):
+- convert the texture color to HSV (in gamma space, since that's closer to how the colors were picked)
+- **shadow**: the hue slides towards a `Shadow Hue` (purple here) the short way around the color wheel, saturation goes up and value goes down. Near-whites get some extra saturation so a white cloud gets a lavender shadow instead of a grey one
+- **highlight**: value gets lifted towards 1, a bit less saturated, nudged slightly warm
+
+The clouds use it with a soft pastel texture (`Textures/Cloud Pastel.png`, made by the same script), which gives them the cream / pink / mint patches that the clouds in the concept have. The night clouds use the same texture with a blue tint and a darker shadow hue. It goes through the same ramp, rim and shadow texture code as the regular toon shader, so it still gets the sparkle shadows.
+
+## Video
+
+[turnaround.mp4](Screenshots/turnaround.mp4), 24 seconds: one full turn in day mode, space, one full turn at night.
+
+I recorded it with `Scripts/TurnaroundCapture.cs`. It sets `Time.captureFramerate` to 30 and saves the main camera to numbered PNGs every frame, so the video comes out smooth even when the editor can't actually render at 30 fps. It also has a `Switch Mode At Frame` option that flips to night mode halfway through (calls the same functions Space does), so the switch happens at exactly the same camera angle. Then ffmpeg:
+
+```
+ffmpeg -framerate 30 -i frame_%04d.png -c:v libx264 -pix_fmt yuv420p turnaround.mp4
+```
+
+## Things I'd fix with more time
+
+- The normal buffer is a fixed 1920x1080 render texture, so in a differently sized game view the normal lines get a little softer.
+- `Shadow Scale` is a single number, but capsule UVs stretch along the length, so the hatching gets longer on the long parts.
+- The "Receive Shadows" toggle on the mesh renderer doesn't do anything for these custom lit shaders, so the sea picks up cloud shadows. I just made the sea's shadow color close to its midtone so they're subtle.
+
+## Credits / references
+
+- Concept art: [requinoesis](https://www.artstation.com/requinoesis)
+- The tutorial videos from this assignment (full screen feature, depth and normal buffers, additional lights)
+- [NedMakesGames - Sobel outlines](https://youtu.be/RMt6DcaMxcE), [Robin Seibold - Robert's cross outlines](https://youtu.be/LMqio9NsqmM), [Alexander Ameye - edge detection outlines](https://ameye.dev/notes/edge-detection-outlines/)
+- [Inigo Quilez - cosine palettes](https://iquilezles.org/articles/palettes/)
+
+---
+
+# Original Instructions
 
 ## Project Overview:
 In this assignment, you will use a 2D concept art piece as inspiration to create a 3D Stylized scene in Unity. This will give you the opportunity to explore stylized graphics techniques alongside non-photo-realistic (NPR) real-time rendering workflows in Unity.

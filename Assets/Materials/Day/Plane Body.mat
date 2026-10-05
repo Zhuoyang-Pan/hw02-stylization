@@ -1,0 +1,90 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!21 &2100000
+Material:
+  serializedVersion: 8
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_Name: Plane Body
+  m_Shader: {fileID: -6465566751694194690, guid: 54e01a9062854cab86e4b53692e7ad09,
+    type: 3}
+  m_Parent: {fileID: 0}
+  m_ModifiedSerializedProperties: 0
+  m_ValidKeywords: []
+  m_InvalidKeywords: []
+  m_LightmapFlags: 4
+  m_EnableInstancingVariants: 0
+  m_DoubleSidedGI: 0
+  m_CustomRenderQueue: -1
+  stringTagMap: {}
+  disabledShaderPasses: []
+  m_LockedProperties: 
+  m_SavedProperties:
+    serializedVersion: 3
+    m_TexEnvs:
+    - _Shadow_Texture:
+        m_Texture: {fileID: 2800000, guid: 3af0f3082495480e991dd1d71dcb2a5c, type: 3}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - unity_Lightmaps:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - unity_LightmapsInd:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - unity_ShadowMasks:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    m_Ints: []
+    m_Floats:
+    - _ADDITIONAL_LIGHTS: 0
+    - _ADDITIONAL_LIGHT_SHADOWS: 0
+    - _Additional_Light_Strength: 0.45
+    - _Glossiness: 40
+    - _Highlight_Threshold: 0.62
+    - _Holo_Rim: 0.85
+    - _Holo_Strength: 0.8
+    - _MAIN_LIGHT_SHADOWS: 0
+    - _MAIN_LIGHT_SHADOWS_CASCADE: 0
+    - _QueueControl: 0
+    - _QueueOffset: 0
+    - _Rim_Light_Align: 0.55
+    - _Rim_Size: 0.28
+    - _Rim_Smoothness: 0.04
+    - _SHADOWS_SOFT: 0
+    - _Shadow_Scale: 2
+    - _Shadow_Texture_Strength: 0.8
+    - _Shadow_Threshold: 0.25
+    - _Smoothness: 0.03
+    - _Sparkle_Density: 5
+    - _Specular_Size: 0.06
+    - _Step_Rate: 8
+    - _Sweep_Range: 4.5
+    - _Sweep_Speed: 0.3
+    - _Sweep_Width: 1.1
+    m_Colors:
+    - _Highlight_Color: {r: 1, g: 0.7764706, b: 0.827451, a: 1}
+    - _Midtone_Color: {r: 0.9882353, g: 0.49803922, b: 0.6117647, a: 1}
+    - _Rim_Color: {r: 0.49019608, g: 0.9529412, b: 0.99215686, a: 1}
+    - _Shadow_Color: {r: 0.6627451, g: 0.54509807, b: 0.9607843, a: 1}
+    - _Shadow_Texture_Color: {r: 0.3529412, g: 0.23529412, b: 0.78431374, a: 1}
+    - _Specular_Color: {r: 1, g: 1, b: 1, a: 1}
+  m_BuildTextureStacks: []
+--- !u!114 &6922270123733605558
+MonoBehaviour:
+  m_ObjectHideFlags: 11
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d0353a89b1f911e48b9e16bdc9f2e058, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  version: 7

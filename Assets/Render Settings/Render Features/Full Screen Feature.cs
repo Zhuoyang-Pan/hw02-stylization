@@ -12,19 +12,23 @@ public class FullScreenFeature : ScriptableRendererFeature
         public Material material;
     }
 
-    [SerializeField] private FullScreenPassSettings settings;
+    // initialized here so Create() doesn't throw when the feature is first added to the renderer
+    [SerializeField] private FullScreenPassSettings settings = new FullScreenPassSettings();
     class FullScreenPass : ScriptableRenderPass
     {
         const string ProfilerTag = "Full Screen Pass";
         public FullScreenFeature.FullScreenPassSettings settings;
         RenderTargetIdentifier colorBuffer, temporaryBuffer;
-        private int temporaryBufferID = Shader.PropertyToID("_TemporaryBuffer");
+        private int temporaryBufferID;
 
-        public FullScreenPass(FullScreenFeature.FullScreenPassSettings passSettings)
+        public FullScreenPass(FullScreenFeature.FullScreenPassSettings passSettings, string featureName)
         {
             this.settings = passSettings;
             this.renderPassEvent = settings.renderPassEvent;
             if (settings.material == null) settings.material = CoreUtils.CreateEngineMaterial("Shader Graphs/Invert");
+            // I have more than one of these features on the renderer (outlines + post),
+            // so each one gets its own temp buffer instead of sharing "_TemporaryBuffer"
+            temporaryBufferID = Shader.PropertyToID("_TemporaryBuffer_" + featureName);
         }
 
         // This method is called before executing the render pass.
@@ -35,6 +39,9 @@ public class FullScreenFeature : ScriptableRendererFeature
         public override void OnCameraSetup(CommandBuffer cmd, ref RenderingData renderingData)
         {
             RenderTextureDescriptor descriptor = renderingData.cameraData.cameraTargetDescriptor;
+            // the temp copy only needs color, no depth / msaa
+            descriptor.depthBufferBits = 0;
+            descriptor.msaaSamples = 1;
             colorBuffer = renderingData.cameraData.renderer.cameraColorTarget;
 
             cmd.GetTemporaryRT(temporaryBufferID, descriptor, FilterMode.Point);
@@ -51,7 +58,10 @@ public class FullScreenFeature : ScriptableRendererFeature
             using (new ProfilingScope(cmd, new ProfilingSampler(ProfilerTag)))
             {
                 // HW 4 Hint: Blit from the color buffer to a temporary buffer and *back*.
+                // The material only writes into the temp buffer, so without the second blit
+                // the result never makes it back to the camera target.
                 Blit(cmd, colorBuffer, temporaryBuffer, settings.material);
+                Blit(cmd, temporaryBuffer, colorBuffer);
             }
 
             // Execute the command buffer and release it.
@@ -72,7 +82,7 @@ public class FullScreenFeature : ScriptableRendererFeature
     /// <inheritdoc/>
     public override void Create()
     {
-        m_FullScreenPass = new FullScreenPass(settings);
+        m_FullScreenPass = new FullScreenPass(settings, name);
     }
 
     // Here you can inject one or multiple render passes in the renderer.
